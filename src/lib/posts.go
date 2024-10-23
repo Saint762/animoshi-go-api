@@ -5,12 +5,14 @@ import (
 	"animoshi-api-go/src/utils"
 	"context"
 	"errors"
+	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 )
@@ -30,6 +32,13 @@ type Post struct {
 	UpdatedTime    string             `bson:"updatedTime" json:"updatedTime"`
 	RecaptchaToken string             `bson:"recaptchaToken,omitempty" json:"recaptchaToken"`
 }
+
+func sanitizeInput(input string) string {
+	re := regexp.MustCompile(`[<>]`)
+	return re.ReplaceAllString(input, "")
+}
+
+var validate = validator.New()
 
 func GetPost(c echo.Context, client *mongo.Client) error {
 	collection := client.Database("animoshiApi").Collection("posts")
@@ -62,6 +71,15 @@ func GetPosts(c echo.Context, client *mongo.Client) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid params"})
 	}
 
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil {
+		return err
+	}
+
+	if limitInt > 20 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Limit cant be more than 20"})
+	}
+
 	posts, err := infra.FindAllFromCollection(infra.FindAllCollectionsParams{
 		CollectionName: "posts",
 		Client:         client,
@@ -83,6 +101,15 @@ func GetPostsByUserId(c echo.Context, client *mongo.Client) error {
 
 	if !utils.ValidateQueryParams(c, []string{"limit", "offset", "userId"}) {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid params"})
+	}
+
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil {
+		return err
+	}
+
+	if limitInt > 20 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Limit cant be more than 20"})
 	}
 
 	posts, err := infra.FindAllFromCollection(infra.FindAllCollectionsParams{
@@ -127,6 +154,15 @@ func GetPostCommentsByPostId(c echo.Context, client *mongo.Client) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid params"})
 	}
 
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil {
+		return err
+	}
+
+	if limitInt > 20 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Limit cant be more than 20"})
+	}
+
 	postComments, err := infra.FindAllFromCollection(infra.FindAllCollectionsParams{
 		CollectionName: "postComments",
 		Client:         client,
@@ -156,6 +192,30 @@ func NewPost(c echo.Context, client *mongo.Client, post *Post) error {
 	if !valid {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid Recaptcha Token"})
 	}
+
+	if err := validate.Struct(post); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed"})
+	}
+
+	if len(post.Title) > 100 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Title is too long"})
+	}
+
+	if len(post.Content) > 500 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Content is too long"})
+	}
+
+	if len(post.Image) > 500 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Image is too long"})
+	}
+
+	if len(post.UserID) > 128 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "UserId is too long"})
+	}
+
+	post.Title = sanitizeInput(post.Title)
+	post.Content = sanitizeInput(post.Content)
+	post.UserID = sanitizeInput(post.UserID)
 
 	post.CreatedTime = strconv.FormatInt(currentTime, 10)
 	post.UpdatedTime = strconv.FormatInt(currentTime, 10)

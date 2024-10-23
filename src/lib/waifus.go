@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 type Waifu struct {
@@ -57,6 +58,15 @@ func GetWaifus(c echo.Context, client *mongo.Client) error {
 
 	if !utils.ValidateQueryParams(c, []string{"limit", "offset"}) {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid params"})
+	}
+
+	limitInt, err := strconv.Atoi(limit)
+	if err != nil {
+		return err
+	}
+
+	if limitInt > 20 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Limit cant be more than 20"})
 	}
 
 	waifus, err := infra.FindAllFromCollection(infra.FindAllCollectionsParams{
