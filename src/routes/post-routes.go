@@ -43,4 +43,18 @@ func SetupPostRoutes(e *echo.Echo, client *mongo.Client) {
 
 		return nil
 	})
+
+	e.POST("/comment", func(c echo.Context) error {
+		postComment := new(lib.PostComment)
+
+		if err := c.Bind(postComment); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
+		}
+
+		if err := lib.NewPostComment(c, client, postComment); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }

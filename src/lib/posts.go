@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -28,6 +29,16 @@ type Post struct {
 	Comments       int64              `bson:"comments" json:"comments"`
 	UserID         string             `bson:"userId" json:"userId"`
 	UserName       string             `bson:"userName" json:"userName"`
+	CreatedTime    string             `bson:"createdTime" json:"createdTime"`
+	UpdatedTime    string             `bson:"updatedTime" json:"updatedTime"`
+	RecaptchaToken string             `bson:"recaptchaToken,omitempty" json:"recaptchaToken"`
+}
+
+type PostComment struct {
+	ID             primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
+	PostId         string             `bson:"postId" json:"postId"`
+	UserID         string             `bson:"userId" json:"userId"`
+	Text           string             `bson:"text" json:"text"`
 	CreatedTime    string             `bson:"createdTime" json:"createdTime"`
 	UpdatedTime    string             `bson:"updatedTime" json:"updatedTime"`
 	RecaptchaToken string             `bson:"recaptchaToken,omitempty" json:"recaptchaToken"`
@@ -209,6 +220,10 @@ func NewPost(c echo.Context, client *mongo.Client, post *Post) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Image is too long"})
 	}
 
+	if len(post.Image) > 0 && !strings.HasPrefix(post.Image, "https://") {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Image URL must start with https://"})
+	}
+
 	if len(post.UserID) > 128 {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "UserId is too long"})
 	}
@@ -233,4 +248,78 @@ func NewPost(c echo.Context, client *mongo.Client, post *Post) error {
 	}
 
 	return c.JSON(http.StatusOK, post)
+}
+
+func NewPostComment(c echo.Context, client *mongo.Client, postComment *PostComment) error {
+	currentTime := time.Now().UnixNano() / int64(time.Millisecond)
+
+	if postComment.RecaptchaToken == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Recaptcha token is required"})
+	}
+
+	valid, err := utils.VerifyRecaptcha(postComment.RecaptchaToken)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid Recaptcha Token"})
+	}
+
+	if !valid {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid Recaptcha Token"})
+	}
+
+	if err := validate.Struct(postComment); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed"})
+	}
+
+	if len(postComment.Text) > 500 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Content is too long"})
+	}
+
+	if len(postComment.UserID) > 128 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "UserId is too long"})
+	}
+
+	postComment.CreatedTime = strconv.FormatInt(currentTime, 10)
+	postComment.UpdatedTime = strconv.FormatInt(currentTime, 10)
+
+	postComment.ID = primitive.NewObjectID()
+
+	collection := client.Database("animoshiApi").Collection("posts")
+
+	postObjectID, err := primitive.ObjectIDFromHex(postComment.PostId)
+	if err != nil {
+		return err
+	}
+
+	var post bson.M
+	err = collection.FindOne(context.TODO(), bson.M{"_id": postObjectID}).Decode(&post)
+	if err != nil {
+		print(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Post not found"})
+	}
+
+	currentCommentCount, ok := post["comments"].(int64)
+	if !ok {
+		currentCommentCount = 0
+	}
+
+	newCommentCount := currentCommentCount + 1
+
+	update := bson.M{
+		"$set": bson.M{
+			"comments":    newCommentCount,
+			"updatedTime": strconv.FormatInt(currentTime, 10),
+		},
+	}
+
+	insertErr := infra.InsertOne("postComments", client, postComment)
+	if insertErr != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": insertErr.Error()})
+	}
+
+	_, err = collection.UpdateOne(context.TODO(), bson.M{"_id": postObjectID}, update)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update comment count"})
+	}
+
+	return c.JSON(http.StatusOK, postComment)
 }
