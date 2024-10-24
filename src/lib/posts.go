@@ -247,7 +247,6 @@ func NewPost(c echo.Context, client *mongo.Client, post *Post) error {
 
 	post.Likes = 0
 	post.Comments = 0
-	post.NsfwToggle = 0
 	post.UserName = post.UserID
 
 	post.ID = primitive.NewObjectID()
