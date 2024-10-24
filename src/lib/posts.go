@@ -44,6 +44,16 @@ type PostComment struct {
 	RecaptchaToken string             `bson:"recaptchaToken,omitempty" json:"recaptchaToken"`
 }
 
+type PostLike struct {
+	ID             primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
+	PostId         string             `bson:"postId" json:"postId"`
+	UserID         string             `bson:"userId" json:"userId"`
+	UserIP         string             `bson:"userIp" json:"userIp"`
+	CreatedTime    string             `bson:"createdTime" json:"createdTime"`
+	UpdatedTime    string             `bson:"updatedTime" json:"updatedTime"`
+	RecaptchaToken string             `bson:"recaptchaToken,omitempty" json:"recaptchaToken"`
+}
+
 func sanitizeInput(input string) string {
 	re := regexp.MustCompile(`[<>]`)
 	return re.ReplaceAllString(input, "")
@@ -322,4 +332,72 @@ func NewPostComment(c echo.Context, client *mongo.Client, postComment *PostComme
 	}
 
 	return c.JSON(http.StatusOK, postComment)
+}
+
+func LikePost(c echo.Context, client *mongo.Client, postLike *PostLike) error {
+	currentTime := time.Now().UnixNano() / int64(time.Millisecond)
+
+	if postLike.RecaptchaToken == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Recaptcha token is required"})
+	}
+
+	valid, err := utils.VerifyRecaptcha(postLike.RecaptchaToken)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid Recaptcha Token"})
+	}
+
+	if !valid {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid Recaptcha Token"})
+	}
+
+	if err := validate.Struct(postLike); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed"})
+	}
+
+	postLike.UserID = "Anonymous"
+	postLike.UserIP = utils.GetUserIP(c)
+	postLike.CreatedTime = strconv.FormatInt(currentTime, 10)
+	postLike.UpdatedTime = strconv.FormatInt(currentTime, 10)
+
+	postLike.ID = primitive.NewObjectID()
+
+	collection := client.Database("animoshiApi").Collection("posts")
+
+	postObjectID, err := primitive.ObjectIDFromHex(postLike.PostId)
+	if err != nil {
+		return err
+	}
+
+	var post bson.M
+	err = collection.FindOne(context.TODO(), bson.M{"_id": postObjectID}).Decode(&post)
+	if err != nil {
+		print(err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Post not found"})
+	}
+
+	currentLikeCount, ok := post["likes"].(int64)
+	if !ok {
+		currentLikeCount = 0
+	}
+
+	newLikeCount := currentLikeCount + 1
+
+	update := bson.M{
+		"$set": bson.M{
+			"likes":       newLikeCount,
+			"updatedTime": strconv.FormatInt(currentTime, 10),
+		},
+	}
+
+	insertErr := infra.InsertOne("postLikes", client, postLike)
+	if insertErr != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": insertErr.Error()})
+	}
+
+	_, err = collection.UpdateOne(context.TODO(), bson.M{"_id": postObjectID}, update)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update comment count"})
+	}
+
+	return c.JSON(http.StatusOK, postLike)
 }

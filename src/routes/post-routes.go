@@ -57,4 +57,18 @@ func SetupPostRoutes(e *echo.Echo, client *mongo.Client) {
 
 		return nil
 	})
+
+	e.POST("/likePost", func(c echo.Context) error {
+		postLike := new(lib.PostLike)
+
+		if err := c.Bind(postLike); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
+		}
+
+		if err := lib.LikePost(c, client, postLike); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
