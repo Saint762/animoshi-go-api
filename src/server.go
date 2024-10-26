@@ -30,7 +30,7 @@ func main() {
 	e := echo.New()
 
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"http://localhost:5173", "http://localhost:3000", "https://animoshi-svelte-frontend-zvxn.vercel.app/"},
+		AllowOrigins: []string{"http://localhost:5173", "http://localhost:4173", "http://localhost:3000", "https://animoshi-svelte-frontend-zvxn.vercel.app/"},
 		AllowMethods: []string{http.MethodGet, http.MethodPost},
 	}))
 

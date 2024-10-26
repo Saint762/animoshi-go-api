@@ -19,39 +19,55 @@ import (
 )
 
 type Post struct {
-	ID             primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
-	Title          string             `bson:"title" json:"title"`
-	Content        string             `bson:"content" json:"content"`
-	Image          string             `bson:"image" json:"image"`
-	Video          string             `bson:"video" json:"video"`
-	Likes          int64              `bson:"likes" json:"likes"`
-	NsfwToggle     int64              `bson:"nsfwToggle" json:"nsfwToggle"`
-	Comments       int64              `bson:"comments" json:"comments"`
-	UserID         string             `bson:"userId" json:"userId"`
-	UserName       string             `bson:"userName" json:"userName"`
-	CreatedTime    string             `bson:"createdTime" json:"createdTime"`
-	UpdatedTime    string             `bson:"updatedTime" json:"updatedTime"`
-	RecaptchaToken string             `bson:"recaptchaToken,omitempty" json:"recaptchaToken"`
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
+	Title       string             `bson:"title" json:"title"`
+	Content     string             `bson:"content" json:"content"`
+	Image       string             `bson:"image" json:"image"`
+	Video       string             `bson:"video" json:"video"`
+	Likes       int64              `bson:"likes" json:"likes"`
+	NsfwToggle  int64              `bson:"nsfwToggle" json:"nsfwToggle"`
+	Comments    int64              `bson:"comments" json:"comments"`
+	UserID      string             `bson:"userId" json:"userId"`
+	UserName    string             `bson:"userName" json:"userName"`
+	CreatedTime string             `bson:"createdTime" json:"createdTime"`
+	UpdatedTime string             `bson:"updatedTime" json:"updatedTime"`
+
+	UserIP         string `bson:"userIp" json:"userIp"`
+	RecaptchaToken string `bson:"recaptchaToken,omitempty" json:"recaptchaToken"`
+	AniToken       string `bson:"aniToken" json:"aniToken"`
 }
 
 type PostComment struct {
-	ID             primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
-	PostId         string             `bson:"postId" json:"postId"`
-	UserID         string             `bson:"userId" json:"userId"`
-	Text           string             `bson:"text" json:"text"`
-	CreatedTime    string             `bson:"createdTime" json:"createdTime"`
-	UpdatedTime    string             `bson:"updatedTime" json:"updatedTime"`
-	RecaptchaToken string             `bson:"recaptchaToken,omitempty" json:"recaptchaToken"`
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
+	PostId      string             `bson:"postId" json:"postId"`
+	UserID      string             `bson:"userId" json:"userId"`
+	Text        string             `bson:"text" json:"text"`
+	CreatedTime string             `bson:"createdTime" json:"createdTime"`
+	UpdatedTime string             `bson:"updatedTime" json:"updatedTime"`
+
+	UserIP         string `bson:"userIp" json:"userIp"`
+	RecaptchaToken string `bson:"recaptchaToken,omitempty" json:"recaptchaToken"`
+	AniToken       string `bson:"aniToken" json:"aniToken"`
 }
 
 type PostLike struct {
-	ID             primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
-	PostId         string             `bson:"postId" json:"postId"`
-	UserID         string             `bson:"userId" json:"userId"`
-	UserIP         string             `bson:"userIp" json:"userIp"`
-	CreatedTime    string             `bson:"createdTime" json:"createdTime"`
-	UpdatedTime    string             `bson:"updatedTime" json:"updatedTime"`
-	RecaptchaToken string             `bson:"recaptchaToken,omitempty" json:"recaptchaToken"`
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
+	PostId      string             `bson:"postId" json:"postId"`
+	UserID      string             `bson:"userId" json:"userId"`
+	CreatedTime string             `bson:"createdTime" json:"createdTime"`
+	UpdatedTime string             `bson:"updatedTime" json:"updatedTime"`
+
+	UserIP         string `bson:"userIp" json:"userIp"`
+	RecaptchaToken string `bson:"recaptchaToken,omitempty" json:"recaptchaToken"`
+	AniToken       string `bson:"aniToken" json:"aniToken"`
+}
+
+type PostLikeResponse struct {
+	ID          primitive.ObjectID `json:"_id"`
+	PostId      string             `json:"postId"`
+	UserID      string             `json:"userId"`
+	CreatedTime string             `json:"createdTime"`
+	UpdatedTime string             `json:"updatedTime"`
 }
 
 func sanitizeInput(input string) string {
@@ -242,6 +258,7 @@ func NewPost(c echo.Context, client *mongo.Client, post *Post) error {
 	post.Content = sanitizeInput(post.Content)
 	post.UserID = sanitizeInput(post.UserID)
 
+	post.UserIP = utils.GetUserIP(c)
 	post.CreatedTime = strconv.FormatInt(currentTime, 10)
 	post.UpdatedTime = strconv.FormatInt(currentTime, 10)
 
@@ -287,6 +304,7 @@ func NewPostComment(c echo.Context, client *mongo.Client, postComment *PostComme
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "UserId is too long"})
 	}
 
+	postComment.UserIP = utils.GetUserIP(c)
 	postComment.CreatedTime = strconv.FormatInt(currentTime, 10)
 	postComment.UpdatedTime = strconv.FormatInt(currentTime, 10)
 
@@ -360,7 +378,24 @@ func LikePost(c echo.Context, client *mongo.Client, postLike *PostLike) error {
 
 	postLike.ID = primitive.NewObjectID()
 
-	collection := client.Database("animoshiApi").Collection("posts")
+	postCollection := client.Database("animoshiApi").Collection("posts")
+	postLikesCollection := client.Database("animoshiApi").Collection("postLikes")
+
+	existingLikeFilter := bson.M{
+		"postId": postLike.PostId,
+		"$or": []bson.M{
+			{"userIp": postLike.UserIP},
+			{"aniToken": postLike.AniToken},
+		},
+	}
+
+	var existingLike PostLike
+	err = postLikesCollection.FindOne(c.Request().Context(), existingLikeFilter).Decode(&existingLike)
+	if err == nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "You have already liked this post!"})
+	} else if err != mongo.ErrNoDocuments {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database error"})
+	}
 
 	postObjectID, err := primitive.ObjectIDFromHex(postLike.PostId)
 	if err != nil {
@@ -368,7 +403,7 @@ func LikePost(c echo.Context, client *mongo.Client, postLike *PostLike) error {
 	}
 
 	var post bson.M
-	err = collection.FindOne(context.TODO(), bson.M{"_id": postObjectID}).Decode(&post)
+	err = postCollection.FindOne(context.TODO(), bson.M{"_id": postObjectID}).Decode(&post)
 	if err != nil {
 		print(err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Post not found"})
@@ -393,10 +428,18 @@ func LikePost(c echo.Context, client *mongo.Client, postLike *PostLike) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": insertErr.Error()})
 	}
 
-	_, err = collection.UpdateOne(context.TODO(), bson.M{"_id": postObjectID}, update)
+	_, err = postCollection.UpdateOne(context.TODO(), bson.M{"_id": postObjectID}, update)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update comment count"})
 	}
 
-	return c.JSON(http.StatusOK, postLike)
+	response := PostLikeResponse{
+		ID:          postLike.ID,
+		PostId:      postLike.PostId,
+		UserID:      postLike.UserID,
+		CreatedTime: postLike.CreatedTime,
+		UpdatedTime: postLike.UpdatedTime,
+	}
+
+	return c.JSON(http.StatusOK, response)
 }
