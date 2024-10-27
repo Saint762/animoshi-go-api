@@ -18,6 +18,16 @@ import (
 	"time"
 )
 
+type PostRequest struct {
+	Title          string `bson:"title" json:"title"`
+	Content        string `bson:"content" json:"content"`
+	Image          string `bson:"image" json:"image"`
+	NsfwToggle     int64  `bson:"nsfwToggle" json:"nsfwToggle"`
+	UserID         string `bson:"userId" json:"userId"`
+	RecaptchaToken string `bson:"recaptchaToken,omitempty" json:"recaptchaToken"`
+	AniToken       string `bson:"aniToken" json:"aniToken"`
+}
+
 type Post struct {
 	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
 	Title       string             `bson:"title" json:"title"`
@@ -214,14 +224,14 @@ func GetPostCommentsByPostId(c echo.Context, client *mongo.Client) error {
 	return c.JSON(http.StatusOK, postComments)
 }
 
-func NewPost(c echo.Context, client *mongo.Client, post *Post) error {
+func NewPost(c echo.Context, client *mongo.Client, postRequest *PostRequest) error {
 	currentTime := time.Now().UnixNano() / int64(time.Millisecond)
 
-	if post.RecaptchaToken == "" {
+	if postRequest.RecaptchaToken == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Recaptcha token is required"})
 	}
 
-	valid, err := utils.VerifyRecaptcha(post.RecaptchaToken)
+	valid, err := utils.VerifyRecaptcha(postRequest.RecaptchaToken)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid Recaptcha Token"})
 	}
@@ -230,28 +240,38 @@ func NewPost(c echo.Context, client *mongo.Client, post *Post) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid Recaptcha Token"})
 	}
 
-	if err := validate.Struct(post); err != nil {
+	if err := validate.Struct(postRequest); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed"})
 	}
 
-	if len(post.Title) > 100 {
+	if len(postRequest.Title) > 100 {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Title is too long"})
 	}
 
-	if len(post.Content) > 500 {
+	if len(postRequest.Content) > 500 {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Content is too long"})
 	}
 
-	if len(post.Image) > 500 {
+	if len(postRequest.Image) > 500 {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Image is too long"})
 	}
 
-	if len(post.Image) > 0 && !strings.HasPrefix(post.Image, "https://") {
+	if len(postRequest.Image) > 0 && !strings.HasPrefix(postRequest.Image, "https://") {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Image URL must start with https://"})
 	}
 
-	if len(post.UserID) > 128 {
+	if len(postRequest.UserID) > 128 {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "UserId is too long"})
+	}
+
+	post := Post{
+		Title:          postRequest.Title,
+		Content:        postRequest.Content,
+		Image:          postRequest.Image,
+		NsfwToggle:     postRequest.NsfwToggle,
+		UserID:         postRequest.UserID,
+		RecaptchaToken: postRequest.RecaptchaToken,
+		AniToken:       postRequest.AniToken,
 	}
 
 	post.Title = sanitizeInput(post.Title)
