@@ -62,7 +62,7 @@ func SetupPostRoutes(e *echo.Echo, client *mongo.Client) {
 			}
 
 			if !validTypes[contentType] {
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid file type. Only JPG, PNG, and GIF are allowed."})
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid file type. Only JPG, PNG, WEBP and GIF are allowed."})
 			}
 
 			if err == nil {
