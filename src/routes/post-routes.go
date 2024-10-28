@@ -42,6 +42,31 @@ func SetupPostRoutes(e *echo.Echo, client *mongo.Client) {
 		recaptchaToken := c.FormValue("recaptchaToken")
 		aniToken := c.FormValue("aniToken")
 
+		if len(content) > 500 {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Content is too long"})
+		}
+
+		if len(userId) > 128 {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "UserId is too long"})
+		}
+
+		if recaptchaToken == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Recaptcha token is required"})
+		}
+
+		valid, err := utils.VerifyRecaptcha(recaptchaToken)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid Recaptcha Token"})
+		}
+
+		if !valid {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid Recaptcha Token"})
+		}
+
+		if aniToken == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Token is required!"})
+		}
+
 		var fileURL string
 		var imageURL string
 

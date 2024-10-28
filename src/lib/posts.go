@@ -320,14 +320,6 @@ func NewPostComment(c echo.Context, client *mongo.Client, postComment *PostComme
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed"})
 	}
 
-	if len(postComment.Text) > 500 {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Content is too long"})
-	}
-
-	if len(postComment.UserID) > 128 {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "UserId is too long"})
-	}
-
 	postComment.UserIP = utils.GetUserIP(c)
 	postComment.CreatedTime = strconv.FormatInt(currentTime, 10)
 	postComment.UpdatedTime = strconv.FormatInt(currentTime, 10)
