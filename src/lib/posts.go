@@ -244,6 +244,10 @@ func NewPost(c echo.Context, client *mongo.Client, postRequest *PostRequest) err
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed"})
 	}
 
+	if len(postRequest.Title) == 0 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Title is required!"})
+	}
+
 	if len(postRequest.Title) > 100 {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Title is too long"})
 	}
