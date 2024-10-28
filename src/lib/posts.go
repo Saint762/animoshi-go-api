@@ -227,19 +227,6 @@ func GetPostCommentsByPostId(c echo.Context, client *mongo.Client) error {
 func NewPost(c echo.Context, client *mongo.Client, postRequest *PostRequest) error {
 	currentTime := time.Now().UnixNano() / int64(time.Millisecond)
 
-	if postRequest.RecaptchaToken == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Recaptcha token is required"})
-	}
-
-	valid, err := utils.VerifyRecaptcha(postRequest.RecaptchaToken)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid Recaptcha Token"})
-	}
-
-	if !valid {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Invalid Recaptcha Token"})
-	}
-
 	if err := validate.Struct(postRequest); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Validation failed"})
 	}
