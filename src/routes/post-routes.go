@@ -49,7 +49,7 @@ func SetupPostRoutes(e *echo.Echo, client *mongo.Client) {
 		if err != nil {
 			print("No File Uploaded!")
 		} else {
-			if file.Size > 5*1024*1024 { // 5MB
+			if file.Size > 8*1024*1024 { // 8MB
 				return c.JSON(http.StatusBadRequest, map[string]string{"error": "File size exceeds 5MB"})
 			}
 
@@ -58,6 +58,7 @@ func SetupPostRoutes(e *echo.Echo, client *mongo.Client) {
 				"image/jpeg": true,
 				"image/png":  true,
 				"image/gif":  true,
+				"image/webp": true,
 			}
 
 			if !validTypes[contentType] {
