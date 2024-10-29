@@ -239,8 +239,8 @@ func NewPost(c echo.Context, client *mongo.Client, postRequest *PostRequest) err
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Title is too long"})
 	}
 
-	if len(postRequest.Content) > 500 {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Content is too long"})
+	if len(postRequest.Content) > 1000 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Text is too long! Only 1000 characters are allowed!"})
 	}
 
 	if len(postRequest.Image) > 500 {
@@ -292,6 +292,14 @@ func NewPostComment(c echo.Context, client *mongo.Client, postComment *PostComme
 
 	if postComment.RecaptchaToken == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Recaptcha token is required"})
+	}
+
+	if len(postComment.Text) > 1000 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Text is too long! Only 1000 characters are allowed!"})
+	}
+
+	if len(postComment.UserID) > 128 {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "UserId is too long"})
 	}
 
 	valid, err := utils.VerifyRecaptcha(postComment.RecaptchaToken)
