@@ -162,4 +162,18 @@ func SetupPostRoutes(e *echo.Echo, client *mongo.Client) {
 
 		return nil
 	})
+
+	e.POST("/dislikePost", func(c echo.Context) error {
+		postDislike := new(lib.PostDislike)
+
+		if err := c.Bind(postDislike); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
+		}
+
+		if err := lib.DislikePost(c, client, postDislike); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
